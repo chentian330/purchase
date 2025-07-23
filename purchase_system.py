@@ -6,6 +6,8 @@ import math
 import streamlit.components.v1 as components  # 添加components导入
 import time
 import re
+import plotly.graph_objects as go  # 添加plotly导入，用于数据可视化
+import openpyxl  # 明确导入openpyxl，用于Excel文件处理
 
 # 设置页面配置
 st.set_page_config(
@@ -27,6 +29,8 @@ if 'data_loaded' not in st.session_state:
     st.session_state['data_loaded'] = False
 if 'excel_data' not in st.session_state:
     st.session_state['excel_data'] = None
+if 'tried_auto_load' not in st.session_state:
+    st.session_state['tried_auto_load'] = False
 
 
 # 格式化金额函数
@@ -863,8 +867,9 @@ def auto_detect_excel_file():
 
         # 遍历所有可能的模式
         for pattern in patterns:
-            files = glob.glob(pattern)
-            all_files.extend(files)
+            matched_files = glob.glob(pattern)
+            if matched_files:  # 确保匹配到文件才添加
+                all_files.extend(matched_files)
 
         if all_files:
             # 按文件修改时间排序，获取最新的文件
@@ -872,10 +877,18 @@ def auto_detect_excel_file():
             return latest_file
 
         return None
+    except FileNotFoundError as e:
+        st.error(f"文件未找到: {e}")
+        return None
+    except PermissionError as e:
+        st.error(f"文件访问权限错误: {e}")
+        return None
+    except OSError as e:
+        st.error(f"操作系统错误: {e}")
+        return None
     except Exception as e:
         st.error(f"文件检测出错: {e}")
-
-    return None
+        return None
 
 
 # 加载Excel数据
@@ -1157,7 +1170,7 @@ def show_home_page():
         # 本地环境自动检测Excel文件
         if not already_loaded and is_running_locally():
             # 检查会话状态中是否已经尝试过自动加载
-            if 'tried_auto_load' not in st.session_state:
+            if not st.session_state.get('tried_auto_load', False):
                 st.session_state['tried_auto_load'] = True
 
                 # 尝试自动检测文件
@@ -1167,7 +1180,7 @@ def show_home_page():
                         try:
                             # 加载检测到的文件
                             excel_data, success_msg, file_name = load_excel_data(local_file)
-                            if excel_data:
+                            if excel_data is not None:  # 确保excel_data非空
                                 # 使用新的卡片样式显示成功消息
                                 auto_detect_content = f"""
                                 <div style="display: flex; align-items: center; justify-content: center; padding: 0.5rem;">
@@ -1180,6 +1193,12 @@ def show_home_page():
                                 """
                                 auto_detect_html = create_glass_card(auto_detect_content, text_align="center")
                                 components.html(auto_detect_html, height=120)
+                        except FileNotFoundError as e:
+                            show_error_card(f"文件未找到: {str(e)}")
+                        except PermissionError as e:
+                            show_error_card(f"文件访问权限错误: {str(e)}")
+                        except OSError as e:
+                            show_error_card(f"操作系统错误: {str(e)}")
                         except Exception as e:
                             show_error_card(f"自动加载文件出错: {str(e)}")
 
@@ -1191,7 +1210,7 @@ def show_home_page():
             label_visibility="collapsed"
         )
 
-        # 处理手动上传的文件
+        # 处理上传的文件
         if uploaded_file is not None:
             with st.spinner("正在处理文件..."):
                 try:
@@ -4563,7 +4582,7 @@ def show_history_purchase_compare():
             return ''
 
         # 应用样式并显示
-        styled_df = amount_df.style.applymap(highlight_unavailable, subset=['环比增长率'])
+        styled_df = amount_df.style.map(highlight_unavailable, subset=['环比增长率'])
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # 第二部分：历月小单数统计
@@ -4751,7 +4770,7 @@ def show_history_purchase_compare():
             return ''
 
         # 应用样式并显示
-        styled_df = orders_df.style.applymap(highlight_unavailable, subset=['环比增长率'])
+        styled_df = orders_df.style.map(highlight_unavailable, subset=['环比增长率'])
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # 第三部分：员工月度采购分析
@@ -5529,7 +5548,7 @@ def show_history_delivery_compare():
             return ''
 
         # 应用样式并显示
-        styled_df = delivery_df.style.applymap(highlight_unavailable, subset=['环比增长率'])
+        styled_df = delivery_df.style.map(highlight_unavailable, subset=['环比增长率'])
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # 第二部分：月度拿货量分析
@@ -5872,7 +5891,7 @@ def show_history_delivery_compare():
         completion_rate_cols = [col for col in table_df.columns if '目标完成率' in col]
 
         # 应用样式
-        styled_table = table_df.style.applymap(highlight_completion_rate, subset=completion_rate_cols)
+        styled_table = table_df.style.map(highlight_completion_rate, subset=completion_rate_cols)
         st.dataframe(styled_table, use_container_width=True, hide_index=True)
 
 
